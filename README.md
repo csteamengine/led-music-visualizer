@@ -7,5 +7,7 @@ This project was built using an Arduino Uno, a SparkFun Spectrum Shield, various
 # Demo
 Once I have completed a fair portion of this project, I will upload a video to youtube of it working. 
 
+# Images
+//TODO add google photos link to the album
 # Instructions
 For those that are interested in re-creating this project, or improving it, I will add instructions below.
