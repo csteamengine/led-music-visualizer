@@ -1,4 +1,5 @@
 #include <FastLED.h>
+#include <EEPROM.h>
 
 //Declare Spectrum Shield pin connections
 #define STROBE 4
@@ -6,7 +7,7 @@
 #define DC_One A0
 #define DC_Two A1 
 #define DATA_PIN     6
-#define NUM_LEDS    20
+#define DEFAULT_LEDS  60
 #define BRIGHTNESS  255
 #define LED_TYPE    WS2812
 #define COLOR_ORDER GRB
@@ -25,6 +26,7 @@
 #define FADE_DELAY 1
 
 //Define spectrum variables
+int NUM_LEDS = DEFAULT_LEDS;
 int freq_amp;
 int Frequencies_One[7];
 int Frequencies_Two[7]; 
@@ -37,6 +39,8 @@ CRGB leds[NUM_LEDS];
 
 /********************Setup Loop*************************/
 void setup() {
+  Serial.begin(9600);
+  
   pinMode(BUTTONUP, INPUT_PULLUP);
   pinMode(BUTTONDOWN, INPUT_PULLUP);
   
@@ -59,9 +63,13 @@ void setup() {
   delay(1);
   digitalWrite(RESET, LOW);
   
+  readLedCount();
+  
   FastLED.addLeds<LED_TYPE, DATA_PIN, COLOR_ORDER>(leds, NUM_LEDS).setCorrection(TypicalLEDStrip);
   FastLED.setBrightness(BRIGHTNESS);
   turnOffAllLeds();
+  
+  printSettings();
 }
 
 /**************************Main Function Loop*****************************/
@@ -76,20 +84,30 @@ void loop() {
  
 }
 
+//This function uses the Frequencies we read from the spectrum shield and uses them to output LED settings.
+void setLeds(){
+  if (freq_amp == DRUM_BAND && (Frequencies_One[DRUM_BAND] > DRUM_VOLUME_THRESHOLD || Frequencies_Two[DRUM_BAND] > DRUM_VOLUME_THRESHOLD)) {
+    // We're fading all the time, but only going to 100% brightness when there's a beat
+    fill_solid(leds, NUM_LEDS, CHSV(hue, 255, BRIGHTNESS));
+    // Might as well have some color variation
+    hue = (hue + 1) % 256;
+  } 
+}
+
 void readButtons(){
   if(digitalRead(BUTTON_UP) == LOW && digitalRead(BUTTON_DOWN) == LOW){
-    readLedCount();   
+    inputLedCount();   
   }
 }
 
-void readLedCount(){
+void inputLedCount(){
   int ledCount = NUM_LEDS;
   while(1){
     //TODO make sure this is the right color
     fill_solid(leds, ledCount, CHSV(hue, 255, BRIGHTNESS));
-    if(digitalRead(BUTTON_UP) == LOW && digitalRead(BUTTON_DOWN) == HIGH){
+    if(digitalRead(BUTTON_UP) == LOW && digitalRead(BUTTON_DOWN) == HIGH){ //TODO consider setting max led count
       ledCount++;
-    }else if(digitalRead(BUTTON_UP) == HIGH && digitalRead(BUTTON_DOWN) == LOW){
+    }else if(digitalRead(BUTTON_UP) == HIGH && digitalRead(BUTTON_DOWN) == LOW && ledCount > 0){
       ledCount--;
     }else if(digitalRead(BUTTON_UP) == LOW && digitalRead(BUTTON_DOWN) == LOW){
       updateLedCount();
@@ -100,9 +118,30 @@ void readLedCount(){
 }
 
 void updateLedCount(){
-  //TODO update the EEPROM with new LED count
-  //TODO flash LED strip to confirm updated count
+  int ledCount = NUM_LEDS;
+  int multiplier = 0;
+  while(ledCount > 255){
+    ledCount -= 255;
+    multiplier++;
+  }
+  
+  EEPROM.write(0, 1); //Tells our program that we have written to EEPROM once before
+  EEPROM.write(1, ledCount); //Writes the remaining led count
+  EEPROM.write(2, multiplier); //Writes the multplier to EEPROM
 }
+
+void readLedCount(){
+  byte alreadySet = EEPROM.read(0);
+  byte value = EEPROM.read(1);
+  byte multiplier = EEPROM.read(2);
+  if(set == 0x01){
+    //can only save up to 255 in EEPROM, so we use a multiplier
+    NUM_LEDS = (255 * multiplier) + value;
+  }else{
+    updateLedCount(); //Writes our current NUM_LEDS to EEPROM
+  }
+}
+
 void fadeLeds(){
   if (fadeCountdown == 0) {
     fadeToBlackBy(leds, NUM_LEDS, 1);
@@ -111,16 +150,6 @@ void fadeLeds(){
   } else {
     fadeCountdown--;
   }
-}
-
-//This function is very basic and will be updated and improved.
-void setLeds(){
-  if (freq_amp == DRUM_BAND && (Frequencies_One[DRUM_BAND] > DRUM_VOLUME_THRESHOLD || Frequencies_Two[DRUM_BAND] > DRUM_VOLUME_THRESHOLD)) {
-    // We're fading all the time, but only going to 100% brightness when there's a beat
-    fill_solid(leds, NUM_LEDS, CHSV(hue, 255, BRIGHTNESS));
-    // Might as well have some color variation
-    hue = (hue + 1) % 256;
-  } 
 }
 
 void turnOffAllLeds() {
@@ -160,4 +189,37 @@ void printFrequenciesTwo(){
     Serial.print(Frequencies_Two);
   }
   Serial.println("");
+}
+
+void printSettings(){
+  Serial.print("LED COUNT: ");
+  Serial.println(NUM_LEDS); 
+  
+  Serial.print("DATA PIN: ");
+  Serial.println(DATA_PIN); 
+  
+  Serial.print("BRIGHTNESS: ");
+  Serial.println(BRIGHTNESS); 
+  
+  Serial.print("LED TYPE: ");
+  Serial.println(LED_TYPE); 
+  
+  Serial.print("COLOR ORDER: ");
+  Serial.println(COLOR_ORDER); 
+  
+  Serial.print("BUTTON UP: ");
+  Serial.println(BUTTONUP); 
+  
+  Serial.print("BUTTON DOWN: ");
+  Serial.println(BUTTONDOWN); 
+  
+  Serial.print("DRUM BAND: ");
+  Serial.println(DRUM_BAND); 
+  
+  Serial.print("DRUM VOLUME THRESHOLD: ");
+  Serial.println(DRUM_VOLUME_THRESHOLD); 
+  
+  Serial.print("FADE DELAY: ");
+  Serial.println(FADE_DELAY); 
+  
 }
